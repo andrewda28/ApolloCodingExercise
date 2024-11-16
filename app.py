@@ -8,12 +8,12 @@ def get_db_connection():
     return psycopg2.connect(
         database="postgres",
         user="postgres",
-        password="your_password",  # Replace with the password you set
+        password="password",  
         host="localhost",
         port="5432"
     )
 
-# Initialize the database (optional route)
+# Initialize the database
 @app.route('/init', methods=['GET'])
 def init_db():
     try:
@@ -71,9 +71,33 @@ def get_vehicles():
 @app.route('/vehicle', methods=['POST'])
 def create_vehicle():
     data = request.get_json()
+
+    required_fields = ["vin", "manufacturer_name", "description", "horse_power", "model_name", "model_year", "purchase_price", "fuel_type"]
+    for field in required_fields:
+        if field not in data:
+            return jsonify({"message": f"Missing required field: {field}"}), 400
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    # Check if the VIN already exists
+    vin = data.get('vin')
+    cur.execute('SELECT COUNT(*) FROM vehicles WHERE vin = %s;', (vin,))
+    if cur.fetchone()[0] > 0:
+        cur.close()
+        conn.close()
+        return jsonify({"message": "VIN already exists"}), 422
+    
+    if not isinstance(data.get("vin"), str) or len(data.get("vin")) == 0:
+        return jsonify({"message": "Invalid VIN"}), 422
+
+    if not isinstance(data.get("horse_power"), int) or data.get("horse_power") <= 0:
+        return jsonify({"message": "Invalid horse_power"}), 422
+
+    if not isinstance(data.get("purchase_price"), (float, int)) or data.get("purchase_price") <= 0:
+        return jsonify({"message": "Invalid purchase_price"}), 422
+    
     try:
-        conn = get_db_connection()
-        cur = conn.cursor()
         cur.execute('''
             INSERT INTO vehicles (vin, manufacturer_name, description, horse_power, model_name, model_year, purchase_price, fuel_type)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
@@ -82,6 +106,8 @@ def create_vehicle():
             data['horse_power'], data['model_name'], data['model_year'],
             data['purchase_price'], data['fuel_type']
         ))
+
+        
         conn.commit()
         cur.close()
         conn.close()
@@ -112,14 +138,31 @@ def get_vehicle(vin):
             }
             return jsonify(vehicle_data), 200
         else:
-            return jsonify({"error": "Vehicle not found"}), 404
+            return jsonify({"message": "Vehicle not found"}), 404
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"message": str(e)}), 500
 
 # PUT update a vehicle
 @app.route('/vehicle/<string:vin>', methods=['PUT'])
 def update_vehicle(vin):
+    if not request.is_json:
+        return jsonify({"message": "Invalid JSON"}), 400
+
     data = request.get_json()
+
+    # Validate required fields
+    required_fields = ["manufacturer_name", "description", "horse_power", "model_name", "model_year", "purchase_price", "fuel_type"]
+    for field in required_fields:
+        if field not in data:
+            return jsonify({"message": f"Missing required field: {field}"}), 400
+
+    # Validate field values
+    if not isinstance(data["horse_power"], int) or data["horse_power"] <= 0:
+        return jsonify({"message": "Invalid horse_power"}), 422
+
+    if not isinstance(data["purchase_price"], (int, float)) or data["purchase_price"] <= 0:
+        return jsonify({"message": "Invalid purchase_price"}), 422
+    
     try:
         conn = get_db_connection()
         cur = conn.cursor()
@@ -146,6 +189,15 @@ def delete_vehicle(vin):
     try:
         conn = get_db_connection()
         cur = conn.cursor()
+
+        cur.execute('SELECT * FROM vehicles WHERE vin = %s;', (vin,))
+        vehicle = cur.fetchone()
+
+        if not vehicle:
+            cur.close()
+            conn.close()
+            return jsonify({"message": "Vehicle not found"}), 404
+        
         cur.execute('DELETE FROM vehicles WHERE vin = %s;', (vin,))
         conn.commit()
         cur.close()
