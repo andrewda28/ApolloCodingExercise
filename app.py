@@ -3,7 +3,7 @@ import psycopg2
 
 app = Flask(__name__)
 
-# Database connection function
+# Establish a connection to the PostgreSQL database
 def get_db_connection():
     return psycopg2.connect(
         database="postgres",
@@ -13,7 +13,7 @@ def get_db_connection():
         port="5432"
     )
 
-# Initialize the database
+# Create the database table if it doesn't exist
 @app.route('/init', methods=['GET'])
 def init_db():
     try:
@@ -38,7 +38,7 @@ def init_db():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# GET all vehicles
+# Fetch all vehicles from the database
 @app.route('/vehicle', methods=['GET'])
 def get_vehicles():
     try:
@@ -49,7 +49,7 @@ def get_vehicles():
         cur.close()
         conn.close()
 
-        # Convert result to JSON
+        # Format the vehicles as JSON
         vehicle_list = [
             {
                 "vin": row[0],
@@ -67,55 +67,7 @@ def get_vehicles():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# POST a new vehicle
-@app.route('/vehicle', methods=['POST'])
-def create_vehicle():
-    data = request.get_json()
-
-    required_fields = ["vin", "manufacturer_name", "description", "horse_power", "model_name", "model_year", "purchase_price", "fuel_type"]
-    for field in required_fields:
-        if field not in data:
-            return jsonify({"message": f"Missing required field: {field}"}), 400
-    
-    conn = get_db_connection()
-    cur = conn.cursor()
-
-    # Check if the VIN already exists
-    vin = data.get('vin')
-    cur.execute('SELECT COUNT(*) FROM vehicles WHERE vin = %s;', (vin,))
-    if cur.fetchone()[0] > 0:
-        cur.close()
-        conn.close()
-        return jsonify({"message": "VIN already exists"}), 422
-    
-    if not isinstance(data.get("vin"), str) or len(data.get("vin")) == 0:
-        return jsonify({"message": "Invalid VIN"}), 422
-
-    if not isinstance(data.get("horse_power"), int) or data.get("horse_power") <= 0:
-        return jsonify({"message": "Invalid horse_power"}), 422
-
-    if not isinstance(data.get("purchase_price"), (float, int)) or data.get("purchase_price") <= 0:
-        return jsonify({"message": "Invalid purchase_price"}), 422
-    
-    try:
-        cur.execute('''
-            INSERT INTO vehicles (vin, manufacturer_name, description, horse_power, model_name, model_year, purchase_price, fuel_type)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
-        ''', (
-            data['vin'], data['manufacturer_name'], data['description'],
-            data['horse_power'], data['model_name'], data['model_year'],
-            data['purchase_price'], data['fuel_type']
-        ))
-
-        
-        conn.commit()
-        cur.close()
-        conn.close()
-        return jsonify({"message": "Vehicle created successfully!"}), 201
-    except Exception as e:
-        return jsonify({"error": str(e)}), 422
-
-# GET a vehicle by VIN
+# Retrieve a specific vehicle by its VIN
 @app.route('/vehicle/<string:vin>', methods=['GET'])
 def get_vehicle(vin):
     try:
@@ -126,6 +78,7 @@ def get_vehicle(vin):
         cur.close()
         conn.close()
         if vehicle:
+            # Format the vehicle data as JSON
             vehicle_data = {
                 "vin": vehicle[0],
                 "manufacturer_name": vehicle[1],
@@ -142,7 +95,53 @@ def get_vehicle(vin):
     except Exception as e:
         return jsonify({"message": str(e)}), 500
 
-# PUT update a vehicle
+# Add a new vehicle to the database
+@app.route('/vehicle', methods=['POST'])
+def create_vehicle():
+    data = request.get_json()
+
+    # Validate required fields
+    required_fields = ["vin", "manufacturer_name", "description", "horse_power", "model_name", "model_year", "purchase_price", "fuel_type"]
+    for field in required_fields:
+        if field not in data:
+            return jsonify({"message": f"Missing required field: {field}"}), 400
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    # Check for duplicate VIN
+    vin = data.get('vin')
+    cur.execute('SELECT COUNT(*) FROM vehicles WHERE vin = %s;', (vin,))
+    if cur.fetchone()[0] > 0:
+        cur.close()
+        conn.close()
+        return jsonify({"message": "VIN already exists"}), 422
+
+    # Validate fields
+    if not isinstance(data.get("horse_power"), int) or data.get("horse_power") <= 0:
+        return jsonify({"message": "Invalid horse_power"}), 422
+
+    if not isinstance(data.get("purchase_price"), (float, int)) or data.get("purchase_price") <= 0:
+        return jsonify({"message": "Invalid purchase_price"}), 422
+    
+    try:
+        # Insert the vehicle into the database
+        cur.execute('''
+            INSERT INTO vehicles (vin, manufacturer_name, description, horse_power, model_name, model_year, purchase_price, fuel_type)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
+        ''', (
+            data['vin'], data['manufacturer_name'], data['description'],
+            data['horse_power'], data['model_name'], data['model_year'],
+            data['purchase_price'], data['fuel_type']
+        ))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({"message": "Vehicle created successfully!"}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 422
+    
+# Update an existing vehicle's details
 @app.route('/vehicle/<string:vin>', methods=['PUT'])
 def update_vehicle(vin):
     if not request.is_json:
@@ -166,6 +165,7 @@ def update_vehicle(vin):
     try:
         conn = get_db_connection()
         cur = conn.cursor()
+        # Update the vehicle details in the database
         cur.execute('''
             UPDATE vehicles
             SET manufacturer_name = %s, description = %s, horse_power = %s,
@@ -183,13 +183,14 @@ def update_vehicle(vin):
     except Exception as e:
         return jsonify({"error": str(e)}), 422
 
-# DELETE a vehicle
+# Remove a vehicle from the database
 @app.route('/vehicle/<string:vin>', methods=['DELETE'])
 def delete_vehicle(vin):
     try:
         conn = get_db_connection()
         cur = conn.cursor()
 
+        # Check if the vehicle exists
         cur.execute('SELECT * FROM vehicles WHERE vin = %s;', (vin,))
         vehicle = cur.fetchone()
 
@@ -198,6 +199,7 @@ def delete_vehicle(vin):
             conn.close()
             return jsonify({"message": "Vehicle not found"}), 404
         
+        # Delete the vehicle
         cur.execute('DELETE FROM vehicles WHERE vin = %s;', (vin,))
         conn.commit()
         cur.close()
@@ -207,4 +209,5 @@ def delete_vehicle(vin):
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
+    # Run the Flask application
     app.run(port = 5000, debug=True)

@@ -4,16 +4,17 @@ import psycopg2
 
 @pytest.fixture
 def client():
-    # Use Flask's test client
+    # Set up a test client for the Flask application and prepare the test database
     app.config['TESTING'] = True
 
-    # Set up the database and insert test data
+    # Connect to the PostgreSQL database and reset it
     conn = psycopg2.connect(database="postgres", host="localhost", user="postgres", password="password", port="5432")
     cur = conn.cursor()
 
+    # Clear any existing data in the 'vehicles' table
     cur.execute('TRUNCATE TABLE vehicles;')
 
-    # Create the table (if not already created)
+    # Create the 'vehicles' table if it doesn't already exist
     cur.execute('''
     CREATE TABLE IF NOT EXISTS vehicles (
         vin VARCHAR PRIMARY KEY,
@@ -27,7 +28,7 @@ def client():
     );
     ''')
 
-    # Insert test data
+    # Insert a sample vehicle into the table for testing
     cur.execute('''
     INSERT INTO vehicles (vin, manufacturer_name, description, horse_power, model_name, model_year, purchase_price, fuel_type)
     VALUES ('1HGCM82633A123456', 'Honda', 'A reliable car', 200, 'Civic', 2022, 25000.00, 'Gasoline')
@@ -41,11 +42,13 @@ def client():
     with app.test_client() as client:
         yield client
 
+# Test if the database initialization endpoint works correctly
 def test_init_db(client):
     response = client.get('/init')
     assert response.status_code == 200
     assert response.get_json()['message'] == "Table created successfully!"
 
+# Test creating a unique vehicle
 def test_create_vehicle_unique(client):
     vehicle_data = {
         "vin": "1HGCM82633A654321",
@@ -61,6 +64,7 @@ def test_create_vehicle_unique(client):
     assert response.status_code == 201
     assert response.get_json()["message"] == "Vehicle created successfully!"
 
+# Test creating a vehicle with a duplicate VIN
 def test_create_vehicle_duplicate(client):
     vehicle_data = {
         "vin": "1HGCM82633A123456",
@@ -76,6 +80,7 @@ def test_create_vehicle_duplicate(client):
     assert response.status_code == 422
     assert response.get_json()["message"] == "VIN already exists"
 
+# Test creating a vehicle with a missing required field
 def test_create_vehicle_missing_field(client):
     vehicle_data = {
         "vin": "1HGCM82633A123456",
@@ -91,6 +96,7 @@ def test_create_vehicle_missing_field(client):
     assert response.status_code == 400
     assert "Missing required field: description" in response.get_json()["message"]
 
+# Test creating a vehicle with an invalid field value
 def test_create_vehicle_invalid_field(client):
     vehicle_data = {
         "vin": "1HGCM82633A123451",
@@ -106,7 +112,7 @@ def test_create_vehicle_invalid_field(client):
     assert response.status_code == 422
     assert "Invalid horse_power" in response.get_json()["message"]
 
-
+# Test retrieving all vehicles from the database
 def test_get_vehicles(client):
     response = client.get('/vehicle')
     assert response.status_code == 200
@@ -114,8 +120,9 @@ def test_get_vehicles(client):
     assert isinstance(vehicles, list)  # Ensure the response is a list
     assert len(vehicles) >= 1  # At least one vehicle should exist
 
+# Test retrieving vehicles when the table is empty
 def test_get_vehicles_empty_table(client):
-    # Clear the table first
+    # Clear the table
     conn = psycopg2.connect(database="postgres", host="localhost", user="postgres", password="password", port="5432")
     cur = conn.cursor()
     cur.execute('TRUNCATE TABLE vehicles;')
@@ -129,6 +136,7 @@ def test_get_vehicles_empty_table(client):
     assert isinstance(vehicles, list)
     assert len(vehicles) == 0  # Table should be empty
 
+# Test retrieving a vehicle by its VIN
 def test_get_vehicle_by_vin(client):
     vin = "1HGCM82633A123456"
     response = client.get(f'/vehicle/{vin}')
@@ -136,11 +144,13 @@ def test_get_vehicle_by_vin(client):
     vehicle = response.get_json()
     assert vehicle['vin'] == vin
 
+# Test retrieving a vehicle by a non-existent VIN
 def test_get_vehicle_by_nonexistent_vin(client):
     vin = "NONEXISTENTVIN123"
     response = client.get(f'/vehicle/{vin}')
     assert response.status_code == 404
 
+# Test updating an existing vehicle
 def test_update_vehicle(client):
     vin = "1HGCM82633A123456"
     updated_data = {
@@ -156,6 +166,7 @@ def test_update_vehicle(client):
     assert response.status_code == 200
     assert response.get_json()["message"] == "Vehicle updated successfully!"
 
+# Test updating a vehicle with an invalid field
 def test_update_vehicle_invalid_field(client):
     vin = "1HGCM82633A123456"
     updated_data = {
@@ -171,23 +182,23 @@ def test_update_vehicle_invalid_field(client):
     assert response.status_code == 422
     assert "Invalid horse_power" in response.get_json()["message"]
 
+# Test deleting a vehicle by its VIN
 def test_delete_vehicle(client):
     vin = "1HGCM82633A123456"
     response = client.delete(f'/vehicle/{vin}')
     assert response.status_code == 204
 
+# Test deleting a vehicle and verifying it no longer exists
 def delete_then_get_vehicle(client):
     vin = "1HGCM82633A123456"
     response = client.delete(f'/vehicle/{vin}')
     assert response.status_code == 204
-    vin = "1HGCM82633A123456"
     response = client.get(f'/vehicle/{vin}')
     assert response.status_code == 404
 
+# Test deleting a vehicle with a non-existent VIN
 def test_delete_vehicle_nonexistent_vin(client):
     vin = "NONEXISTENTVIN123"
     response = client.delete(f'/vehicle/{vin}')
     assert response.status_code == 404
     assert "Vehicle not found" in response.get_json()["message"]
-    
-
