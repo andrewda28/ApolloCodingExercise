@@ -68,7 +68,6 @@ A simple Flask API to manage vehicles, built as part of Apollo's coding exercise
 ## Example Data
 
 Here is an example JSON payload for creating or updating a vehicle:
-    To run all tests:
    ```json
    {
   "vin": "1HGCM82633A123456",
