@@ -16,6 +16,12 @@ def get_db_connection():
 # Create the database table if it doesn't exist
 @app.route('/init', methods=['GET'])
 def init_db():
+    """
+    Input: None (Triggered by a GET request to /init)
+    Output: JSON response with a success or error message
+        - If the database connection fails, it will return a 500 status code with the error message.
+        - If the table already exists, the operation is idempotent (no duplicate errors).
+    """
     try:
         conn = get_db_connection()
         cur = conn.cursor()
@@ -41,6 +47,12 @@ def init_db():
 # Fetch all vehicles from the database
 @app.route('/vehicle', methods=['GET'])
 def get_vehicles():
+    """
+    Input: None (Triggered by a GET request to /vehicle)
+    Output: JSON response containing a list of all vehicles or an error message
+        - If the database connection fails, it returns a 500 status code with error message.
+        - If no vehicles exist in the table, it returns an empty list.
+    """
     try:
         conn = get_db_connection()
         cur = conn.cursor()
@@ -70,6 +82,12 @@ def get_vehicles():
 # Retrieve a specific vehicle by its VIN
 @app.route('/vehicle/<string:vin>', methods=['GET'])
 def get_vehicle(vin):
+    """
+    Input: VIN (via the URL parameter /vehicle/<vin>)
+    Output: JSON response with vehicle details or an error message
+        - If the VIN does not exist in the database, it returns a 404 status code with a "Vehicle not found" message.
+        - If the database connection fails, it returns a 500 status code with error message.
+    """
     try:
         conn = get_db_connection()
         cur = conn.cursor()
@@ -98,6 +116,15 @@ def get_vehicle(vin):
 # Add a new vehicle to the database
 @app.route('/vehicle', methods=['POST'])
 def create_vehicle():
+    """
+    Input: JSON object containing vehicle details
+        Required fields: vin, manufacturer_name, description, horse_power, model_name, model_year, purchase_price, fuel_type
+    Output: JSON response with success or error message
+        - If any required field is missing, it returns a 400 status code with the missing field.
+        - If the VIN already exists in the database, it returns a 422 status code with a "VIN already exists" message.
+        - If any field contains invalid data (e.g., negative purchase price), it returns a 422 status code with a validation error message.
+        - If the database connection fails, it returns a 500 status code with  error message.
+    """
     data = request.get_json()
 
     # Validate required fields
@@ -144,6 +171,15 @@ def create_vehicle():
 # Update an existing vehicle's details
 @app.route('/vehicle/<string:vin>', methods=['PUT'])
 def update_vehicle(vin):
+    """
+    Input: VIN (via the URL parameter /vehicle/<vin>) and JSON object containing updated vehicle details
+        Required fields: manufacturer_name, description, horse_power, model_name, model_year, purchase_price, fuel_type
+    Output: JSON response with success or error message
+        - If any required field is missing, it returns a 400 status code with the missing field.
+        - If the VIN does not exist in the database, it returns a 404 status code with a "Vehicle not found" message.
+        - If any field contains invalid data (e.g., negative purchase price), it returns a 422 status code with a validation error message.
+        - If the database connection fails, it returns a 500 status code with the error message.
+    """
     if not request.is_json:
         return jsonify({"message": "Invalid JSON"}), 400
 
@@ -186,6 +222,12 @@ def update_vehicle(vin):
 # Remove a vehicle from the database
 @app.route('/vehicle/<string:vin>', methods=['DELETE'])
 def delete_vehicle(vin):
+    """
+    Input: VIN (via the URL parameter /vehicle/<vin>)
+    Output: Empty response with a 204 status code on success or an error message
+        - If the VIN does not exist in the database, it returns a 404 status code with a "Vehicle not found" message.
+        - If the database connection fails, it returns a 500 status code with the error message.
+    """
     try:
         conn = get_db_connection()
         cur = conn.cursor()

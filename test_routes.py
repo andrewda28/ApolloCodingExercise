@@ -134,7 +134,7 @@ def test_get_vehicles_empty_table(client):
     assert response.status_code == 200
     vehicles = response.get_json()
     assert isinstance(vehicles, list)
-    assert len(vehicles) == 0  # Table should be empty
+    assert len(vehicles) == 0 
 
 # Test retrieving a vehicle by its VIN
 def test_get_vehicle_by_vin(client):
